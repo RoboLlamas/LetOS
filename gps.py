@@ -1,19 +1,18 @@
 import Adafruit_BBIO.UART as uart
 import serial
 
-uart.setup("UART4")
-ser = serial.Serial(port = "/dev/ttyO4", baudrate = 9600, timeout = 1)
+def init(tty):
+	global ser
+	uart.setup("UART" + str(tty))
+	ser = serial.Serial(port = "/dev/ttyO" + str(tty), baudrate = 9600, timeout = 1)
 
 fix = False
 latlong = ""
-altitude = 0.0  # meters
-time = ""       # hhmmss
+altitude = 0.0	# meters
+time = ""	# hhmmss
 nSats = 0
-course = 0.0    # degrees
-speed = 0.0     # knots
-
-#TODO:
-#def init():
+course = 0.0	# degrees
+speed = 0.0	# knots
 
 def update():
 	global fix, latlong, altitude, time, nSats, course, speed
@@ -42,6 +41,8 @@ def update():
 
 if __name__ == '__main__':
 	from time import sleep
+
+	init(4)
 
 	while(1):
 		sleep(1)
