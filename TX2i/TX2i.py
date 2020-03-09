@@ -6,41 +6,44 @@ class TX2i:
     ser = None
 
     #Constructor
-    #Establishes connection to TX2i over UART
+    #Summary: Opens serial port for UART comms with TX2i
     #Params: String device name
     def __init__(self, device):
         self.tty = device
         ser = serial.Serial(self.tty)
 
     #Init, Public
-    #Initializes connection to TX2i and does SoH check
+    #Summary: Initializes connection to TX2i and does SoH check
     #Returns: string response from TX2i for logging    
     #Function calls: Comm, passing 'STOP' and response legnth of 8
     def init(self):
         msg = b"STAT"
         response = self.__comm(msg, 8)
+        self.__clear()
         return response
 
     #Start, Public
-    #Sends command to TX2i to begin image capture and proccessing
+    #Summary: Sends command to TX2i to begin image capture and proccessing
     #Returns: string response from TX2i for logging
     #Function calls: Comm, passing 'STOP' and response legnth of 6
     def start(self):
         msg = b"STRT"
         response = self.__comm(msg, 6)
+        self.__clear()
         return response
-    
+
     #Stop, Public
-    #Sends command to TX2i to stop image capture and processing
+    #Summary: Sends command to TX2i to stop image capture and processing
     #Returns: string response from TX2i for logging
     #Function calls: Comm, passing 'STOP' and response legnth of 6
     def stop(self):
         msg = b"STOP"
         response = self.__comm(msg, 6)
+        self.__clear()
         return response
 
     #Comm, Private
-    #Sends the message over the serial port
+    #Summary: Sends the message over the serial port
     #Params: string message, int length of expected response
     #Returns: string response from TX2i
     #Exception: returns exception if error occured
@@ -50,4 +53,10 @@ class TX2i:
             response = self.ser.read(length)
             return response
         except Exception as e:
-            return e
+            return str(e)
+
+    #Clear, private
+    #Clears the input and output buffer from the serial port
+    def __clear(self):
+        self.ser.reset_input_buffer()
+        self.ser.reset_input_buffer()
