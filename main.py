@@ -8,7 +8,7 @@ Main script for LetOS flight software
 import serial
 import gps
 from LetOS.MPU6050 import MPU6050
-from acceleromter import setupAccelerometer
+from accelerometer import setupAccelerometer
 import smbus
 from LetOS import rockBlock
 from RockBlock import letsatRockBlock
