@@ -10,7 +10,7 @@ class TX2i:
     #Params: String device name
     def __init__(self, device):
         self.tty = device
-        ser = serial.Serial(self.tty)
+        self.ser = serial.Serial(self.tty)
 
     #Init, Public
     #Summary: Initializes connection to TX2i and does SoH check
