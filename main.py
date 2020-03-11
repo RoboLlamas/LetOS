@@ -7,7 +7,7 @@ Main script for LetOS flight software
 #<><><><> change the imports after ready to push
 import serial
 import gps
-from LetOS.MPU6050 import MPU6050
+from accelerometer import MPU6050
 from accelerometer import setupAccelerometer
 import smbus
 from LetOS import rockBlock
@@ -35,6 +35,7 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
+#<><><> round some numbers
 def pollData(gps, accel, alt):
 	data = []
 
@@ -51,8 +52,15 @@ def pollData(gps, accel, alt):
 		for i in range(0, 4):
 			data.append(0)
 		logger.error("GPS IO Error")
+		print("GPS IO Error")
+	except Exception as e:
+		for i in range(0, 4):
+			data.appen(0)
+		logger.error("GPS " + str(e))
+		print("GPS " + str(e))
 
         try:
+		#<><><><><> change MPU6050 so returns x, y, z seperately??
 		if (accel is None):
 			raise IOError("No accelerometer")
 		data.append(accel.get_accel_data())
@@ -64,6 +72,12 @@ def pollData(gps, accel, alt):
 		for i in range(0,3):
 			data.append(0)
 		logger.error("Acceleromter IO Error")
+		print("Accelerometer IO Error")
+	except Exception as e:
+		for i in range(0,3):
+			data.append(0)
+		logger.error("Accelerometer " + str(e))
+		print("Accelerometer " + str(e))
 
 	try:
 		if (alt is None):
@@ -78,6 +92,12 @@ def pollData(gps, accel, alt):
 		for i in range(0,4):
 			data.append(0)
 		logger.error("Altimeter IO Error")
+		print("altimeter IO Error")
+	except Exception as e:
+		for i in range(0,4):
+			data.apppend(0)
+		logger.error("Altimeter " + str(e))
+		print("Altimeter " + str(e))
 
 	return data
 
@@ -114,18 +134,20 @@ if(gpsValue is not False):
 	#success
 	gpsStatus = True
 else:
-	print("Error with GPS")
+	print("GPS init error")
+	logger.error("GPS init error")
 
 #accelerometer
 #address 0x68, i2c bus 1
 accelerometer = None
 try:
-	accelerometer = MPU6050(0x68, 1)
+	accelerometer = MPU6050.MPU6050(0x68, 1)
 	#apply hardcoded offsets
-	accelSatus = setupAccelerometer(accelerometer)
-except:
+	accelSatus = setupAccelerometer.setupAccelerometer(accelerometer)
+except Exception as e:
 	#error in MPU6050 init
-	print("Error with accel")
+	print("Accelerometer init " + str(e))
+	logger.error("Accelerometer init " + str(e))
 	accelStatus = False
 
 #<><><><><>
@@ -135,23 +157,29 @@ except:
 #i2c-2 port. Known altitude 111m, sea level pressure 102472 pa
 altimeter = None
 try:
-	altimeter = letsatAltimeter(2, 111, 102472)
+	altimeter = letsatAltimeter.letsatAltimeter(2, 111, 101020)
 	if (not altimeter.verify):
 		altStatus = False
 
-except:
-	print("Error with altimeter")
+except Exception as e:
+	print("Altimeter init " + str(e))
+	logger.error("Altimeter init " + str(e))
 	altStatus = False
 
 
 
 #TX2i
 payload = TX2i.TX2i("/dev/ttyO1")
-statResponse = None
-#statResponse = payload.init()
-if ((statResponse == 0) or (statResponse is None)):
+statResponse = payload.init()
+if not statResponse:
+	sleep(5)
+	statResponse = payload.init()
+
+if "0" in statResponse or (not statResponse):
 	payloadStatus = False
-	print("Error with TX2i")
+	print("TX2i init " + str(statResponse))
+	logger.error("TX2i init " + str(statResponse))
+
 
 #RockBlock
 rb = None
@@ -170,7 +198,8 @@ try:
 			okMessage = "OK"
 		message = message + okMessage + str(signal)
 		success = rb.sendMessage(message.encode())
-except:
+except Exception as e:
+	print(str(e))
         rbStatus = False
 #if rbStatus false, output red color to debug LED
 
@@ -235,6 +264,7 @@ while(True):
 				messagePoll = messagePoll + str(m) + ","
 
 			logger.info(messagePoll)
+			print(messagePoll)
 			#<><><><> sleep for 1 second. How accurate does this need to be??
 			sleep(1)
 
@@ -258,6 +288,7 @@ while(True):
 
 	except (IOError):
 		logger.error("RB IO Error")
+		print("RB IO Error")
 		continue
 	except (KeyboardInterrupt):
 		handlers = logger.handlers[:]
