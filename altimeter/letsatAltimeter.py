@@ -3,6 +3,7 @@ import Adafruit_BMP.BMP085 as BMP085
 
 class letsatAltimeter():
 
+	verify = False
 	#port should be an integer for i2c port
 	#known altitude should be in meters and sealevel in pa
 	def __init__(self, port, knownAlt, seaLevel_pa):
