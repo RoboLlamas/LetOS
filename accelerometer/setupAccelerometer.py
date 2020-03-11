@@ -8,7 +8,7 @@ Z 542
 """
 
 # Import the MPU6050 class from the MPU6050.py file
-from LetOS.MPU6050 import MPU6050
+from MPU6050 import MPU6050
 from time import sleep
 
 
