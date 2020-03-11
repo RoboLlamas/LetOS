@@ -12,6 +12,7 @@ from acceleromter import setupAccelerometer
 import smbus
 from LetOS import rockBlock
 from RockBlock import letsatRockBlock
+from RockBlock.rockBlock import rockBlockException
 from altimeter import letsatAltimeter
 from TX2i import TX2i
 from time import sleep
@@ -35,42 +36,46 @@ logger.addHandler(handler)
 
 
 def pollData(gps, accel, alt):
-	#<><><><> catch errors
 	data = []
 
 	try:
-		gps.update()
-		data.append(gps.LatLong)
-		data.append(gps.Time)
+		if (not gps.update()):
+			raise IOError("No GPS")
+		data.append(gps.latlong)
+		data.append(gps.time)
 		data.append(gps.course)
 		data.append(gps.speed)
 	except (IOError):
 		#gps IOError
 		#set the data to all 0'
-		for i in range(0, 3):
+		for i in range(0, 4):
 			data.append(0)
 		logger.error("GPS IO Error")
 
         try:
+		if (accel is None):
+			raise IOError("No accelerometer")
 		data.append(accel.get_accel_data())
 		data.append(accel.get_gyro_data())
 		data.append(accel.get_temp())
 	except (IOError):
 		#accelerometer IOError
 		#set data to all 0's
-		for i in range(0,2):
+		for i in range(0,3):
 			data.append(0)
 		logger.error("Acceleromter IO Error")
 
 	try:
-		data.append(atl.get_temp())
+		if (alt is None):
+			raise IOError("No altimeter")
+		data.append(alt.get_temp())
 		data.append(alt.get_pressure())
 		data.append(alt.get_altitude())
 		data.append(alt.get_sealevel())
 	except (IOError):
 		#Altimeter IOError
 		#set data to all 0's
-		for i in range(0,3):
+		for i in range(0,4):
 			data.append(0)
 		logger.error("Altimeter IO Error")
 
@@ -96,7 +101,6 @@ falling = False
 #/dev/ttyO4
 gps.init(4)
 #loop until get fix
-#<><><><> add timeout
 gpsValue = 0
 #timeoutCount = 300
 timeoutCount = 2
@@ -114,7 +118,6 @@ else:
 
 #accelerometer
 #address 0x68, i2c bus 1
-#<><><><> When use, check if not none, otherwise error has occured
 accelerometer = None
 try:
 	accelerometer = MPU6050(0x68, 1)
@@ -144,14 +147,14 @@ except:
 
 #TX2i
 payload = TX2i.TX2i("/dev/ttyO1")
-
-statResponse = payload.init()
+statResponse = None
+#statResponse = payload.init()
 if ((statResponse == 0) or (statResponse is None)):
 	payloadStatus = False
 	print("Error with TX2i")
 
 #RockBlock
-nrb = None
+rb = None
 try:
 	rb = letsatRockBlock("/dev/tty02")
 	rb.stateOfHealth()
@@ -174,11 +177,6 @@ except:
 stats = (int(gpsStatus), int(accelStatus), int(altStatus), int(payloadStatus), int(rbStatus))
 logger.info('%d, %d, %d, %d, %d' % stats)
 
-#<><><> closing stuff at end
-#handlers = logger.handlers[:]
-#for h in handlers:
-#	h.close()
-#	logger.removeHandler(h)
 
 print("GPS status: " + str(gpsStatus))
 print("Accelerometer status: " + str(accelStatus))
@@ -194,20 +192,26 @@ Send all data for initial transmit
 
 try:
 	#<><><><> what will be max size of these??
-	initData = pollData(gps, acceleromter, altimeter)
+	initData = pollData(gps, accelerometer, altimeter)
+	print("Polling Data")
 	#send to rb
 	initMessage = ""
 	for m in initData:
-		initMessage = initMessage + m + ","
-	rb.sendMessage(initMessage.encode())
+		initMessage = initMessage + str(m) + ","
+	if (rb is None):
+		raise rockBlockException("No RB")
+	else:
+		rb.sendMessage(initMessage.encode())
 	logger.info(initMessage)
 
-except (rockBlock.rockBlockEception):
+except (rockBlockException):
 	logger.error("Failure to transmit")
-except:
-	#<><><><> What to log/do if fails to get data
-	rb.sendMessage("ER")
+except Exception as e :
+        #<><><><> What to log/do if fails to get data
+	print(str(e))
 	logger.error("Failure to initialize")
+	rb.sendMessage("ER")
+
 
 """
 (4) Polling sensors at 1 Hz
@@ -225,14 +229,14 @@ while(True):
 		sensorData = None
 		while(counter < 60):
 			counter += 1
-			messsagePoll = ""
+			messagePoll = ""
 			sensorData = pollData(gps, accelerometer, altimeter)
 			for m in sensorData:
-				messagePoll = messagePoll + m + ","
+				messagePoll = messagePoll + str(m) + ","
 
-				logger.info(messagePoll)
+			logger.info(messagePoll)
 			#<><><><> sleep for 1 second. How accurate does this need to be??
-			time.sleep(1)
+			sleep(1)
 
 		#<><><><>check for capture altitude
 		if ((not payloadPower) and (sensorData[9] >= CAPTURE_ALTITUDE) and (not falling)):
@@ -255,52 +259,15 @@ while(True):
 	except (IOError):
 		logger.error("RB IO Error")
 		continue
-	except:
+	except (KeyboardInterrupt):
+		handlers = logger.handlers[:]
+		for h in handlers:
+			h.close()
+			logger.removeHandler(h)
+		exit()
+
+	except Exception as e:
+		print(str(e))
 		logger.error("RB Error")
 		continue
 
-"""
-#add objects for altimeter and TX2i
-#<><><><> figure out how to only send GPS data if others encounter errors???
-def pollData(gps, accel, alt):
-	#<><><><> catch errors
-	data = []
-
-	try:
-		gps.update()
-		data.append(gps.LatLong)
-		data.append(gps.Time)
-		data.append(gps.course)
-		data.append(gps.speed)
-	except (IOError):
-		#gps IOError
-		#set the data to all 0's
-		for i in range(0, 3):
-			data.append(0)
-		logger.error("GPS IO Error")
-
-	try:
-		data.append(accel.get_accel_data())
-		data.append(accel.get_gyro_data())
-		data.append(accel.get_temp())
-	except (IOError):
-		#accelerometer IOError
-		#set data to all 0's
-		for i in range(0,2):
-			data.append(0)
-		logger.error("Acceleromter IO Error")
-
-	try:
-		data.append(atl.get_temp())
-		data.append(alt.get_pressure())
-		data.append(alt.get_altitude())
-		data.append(alt.get_sealevel())
-	except (IOError):
-		#Altimeter IOError
-		#set data to all 0's
-		for i in range(0,3):
-			data.append(0)
-		logger.error("Altimeter IO Error")
-
-	return data
-"""
