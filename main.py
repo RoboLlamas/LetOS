@@ -98,7 +98,7 @@ def pollData(gps, accel, alt):
 		for i in range(0,4):
 			data.append(0)
 		logger.error("Altimeter IO Error")
-		print("altimeter IO Error")
+		print("Altimeter IO Error")
 	except Exception as e:
 		for i in range(0,4):
 			data.apppend(0)
@@ -107,7 +107,19 @@ def pollData(gps, accel, alt):
 
 	return data
 
-
+"""
+buildMessage, private
+Summary: builds a string of comma seperated values
+Params: the list of values
+Returns: a string with all values seperated by commas
+"""
+def buildMessage(msg):
+	newMsg = ""
+	for m in msg:
+		newMsg = newMsg + str(m) + ','
+	#remove last comma
+	newMsg = newMsg[:-1]
+	return newMsg
 
 """
 (2) Perform status checks of all sensors
@@ -121,6 +133,7 @@ altStatus = True
 payloadStatus = True
 payloadPower = False
 falling = False
+rbStatus = False
 
 #gps
 #/dev/ttyO4
@@ -212,10 +225,9 @@ try:
 
 	message = ""
 	if((rbStatus) and (int(signal) > 0)):
-		#transmit OK and signal
-		for x in stats:
-			message = message + str(x) + ","
 		#make a byte message with statuses of each as 0 or 1
+		stats = buildMessage(stats)
+		#transmit OK and signal
 		#message = gpsStatus + "," + accelStatus + "," + altStatus + "," + payloadStatus
 		okMessage = "ER"
 		if(gpsStatus and accelStatus and altStatus and payloadStatus):
@@ -234,6 +246,7 @@ except Exception as e:
 	print(str(e))
 	logger.error(str(e))
         rbStatus = False
+	stats = stats + (int(rbStatus),)
 #if rbStatus false, output red color to debug LED
 
 logger.info('%d, %d, %d, %d, %d' % stats)
@@ -256,9 +269,8 @@ try:
 	initData = pollData(gps, accelerometer, altimeter)
 	print("Polling Data")
 	#send to rb
-	initMessage = ""
-	for m in initData:
-		initMessage = initMessage + str(m) + ","
+	initMessage = buildMessage(initData)
+
 	if (rb is None):
 		raise rockBlockException("No RB")
 	else:
@@ -281,6 +293,7 @@ except Exception as e :
 #Setup counter. Counts to 60
 #transmits at 60. Resets.
 #exceptions caught inside while loop will log then continue
+timeout = 0
 while(True):
 	try:
 		counter = 0
@@ -290,28 +303,49 @@ while(True):
 			counter += 1
 			messagePoll = ""
 			sensorData = pollData(gps, accelerometer, altimeter)
-			for m in sensorData:
-				messagePoll = messagePoll + str(m) + ","
-
+			messagePoll = buildMessage(sensorData)
 			logger.info(messagePoll)
 			print(messagePoll)
 			#sleep for 1 second
 			sleep(1)
 
-		#<><><><>check for capture altitude
-		if ((not payloadPower) and (sensorData[9] >= CAPTURE_ALTITUDE) and (not falling)):
+		#increases by 1 every minute...
+		timeout = timeout + 1
+		#timeout after 120 minutes (2 hours)
+		if ((not payloadPower) and (not falling) and (timeout >= 120)):
 			stat = payload.start()
-			if (stat != 0):
+			if(not("0" in stat)):
 				payloadPower = True
+				logger.info("Timeout Payload Start")
+				print("Timeout Payload Start")
 
-		#><><><><>check for burst altitude and/or?? acceleration
-		if (payloadPower and (sensorData[9] >= POP_ALTITUDE)):
+		#timeout after 240 minutes (4 hours)
+		if (payloadPower and (timeout > 240)):
 			stat = payload.stop()
-			if (stat != 0):
+			if (not("0" in stat)):
 				payloadPower = False
 				falling = True
+				logger.info("Timeout Payload Stop")
+				print("Timeout Payload Stop")
 
-		#<><><> add timeout in case altimeter breaks or something
+		#check for capture altitude
+		if ((not payloadPower) and (sensorData[9] >= CAPTURE_ALTITUDE) and (not falling)):
+			stat = payload.start()
+			if (not("0" in stat)):
+				payloadPower = True
+				logger.info("Payload Start")
+				print("Payload Start")
+
+		#check for burst altitude and/or?? acceleration
+		#<><><><>Make sure get correct response from stop command
+		if (payloadPower and (sensorData[9] >= POP_ALTITUDE)):
+			stat = payload.stop()
+			if (not("0" in stat)):
+				payloadPower = False
+				falling = True
+				logger.info("Payload Stop")
+				print("Payload Stop")
+
 		#after breaking out of loop
 		rb.sendMessage(messagePoll.encode())
 		counter = 0
