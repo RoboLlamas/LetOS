@@ -17,8 +17,9 @@ class TX2i:
     #Returns: string response from TX2i for logging    
     #Function calls: Comm, passing 'STOP' and response legnth of 8
     def init(self):
-        msg = b"STAT"
-        response = self.__comm(msg, 8)
+        msg = "STAT"
+        msgSend = bytearray(msg.encode())
+        response = self.__comm(msgSend, 8)
         self.__clear()
         return response
 
@@ -27,8 +28,9 @@ class TX2i:
     #Returns: string response from TX2i for logging
     #Function calls: Comm, passing 'STOP' and response legnth of 6
     def start(self):
-        msg = b"STRT"
-        response = self.__comm(msg, 6)
+        msg = "STRT"
+        msgSend = bytearray(msg.encode())
+        response = self.__comm(msgSend, 6)
         self.__clear()
         return response
 
@@ -37,8 +39,9 @@ class TX2i:
     #Returns: string response from TX2i for logging
     #Function calls: Comm, passing 'STOP' and response legnth of 6
     def stop(self):
-        msg = b"STOP"
-        response = self.__comm(msg, 6)
+        msg = "STOP"
+        msgSend = bytearray(msg.encode())
+        response = self.__comm(msgSend, 6)
         self.__clear()
         return response
 
