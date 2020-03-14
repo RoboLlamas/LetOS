@@ -4,7 +4,6 @@
 Main script for LetOS flight software
 """
 #<><><><> write script to install all necessary dependencies
-#<><><><> change the imports after ready to push
 import serial
 import gps
 from accelerometer import MPU6050
@@ -36,6 +35,13 @@ logger.addHandler(handler)
 
 
 #<><><> round some numbers
+"""
+pollData, Private
+Summary: gets data from gps, accelerometer, and altimeter and stores in array
+Params: gps object, accelerometer object, altimeter object
+Returns: the array of length 11
+Exceptions: Catches IOErrors and other exceptions  and sets values for that sensor to 0
+"""
 def pollData(gps, accel, alt):
 	data = []
 
@@ -107,6 +113,7 @@ def pollData(gps, accel, alt):
 (2) Perform status checks of all sensors
 """
 
+#sensor statuses initial setting
 gpsStatus = False
 accelStatus = True
 rbStatus = True
@@ -114,8 +121,6 @@ altStatus = True
 payloadStatus = True
 payloadPower = False
 falling = False
-
-#<><><><> retry if get errors???? or just transmit failure???
 
 #gps
 #/dev/ttyO4
@@ -125,15 +130,16 @@ gpsValue = 0
 #timeoutCount = 300
 timeoutCount = 2
 while((gpsValue == 0) and (timeoutCount > 0)):
+	#try to update again
 	gpsValue = gps.update()
 	sleep(1)
 	timeoutCount = timeoutCount - 1
 
-#no execution if fails
 if(gpsValue is not False):
 	#success
 	gpsStatus = True
 else:
+	#log any errors
 	print("GPS init error")
 	logger.error("GPS init error")
 
@@ -154,11 +160,13 @@ except Exception as e:
 #thermocouple
 
 #altimeter
-#i2c-2 port. Known altitude 111m, sea level pressure 102472 pa
+#i2c-2 port. Set known altitude and sea level pressure
 altimeter = None
 try:
 	altimeter = letsatAltimeter.letsatAltimeter(2, 111, 101020)
 	if (not altimeter.verify):
+		print("Could not verify altimeter")
+		logger.error("Could not verify altimeter")
 		altStatus = False
 
 except Exception as e:
@@ -172,9 +180,11 @@ except Exception as e:
 payload = TX2i.TX2i("/dev/ttyO1")
 statResponse = payload.init()
 if not statResponse:
+	#no response: sleep and try again
 	sleep(5)
 	statResponse = payload.init()
 
+#If 0, then error has occured or couldn't get response
 if "0" in statResponse or (not statResponse):
 	payloadStatus = False
 	print("TX2i init " + str(statResponse))
@@ -182,28 +192,50 @@ if "0" in statResponse or (not statResponse):
 
 
 #RockBlock
+stats = (int(gpsStatus), int(accelStatus), int(altStatus), int(payloadStatus))
 rb = None
 try:
-	rb = letsatRockBlock("/dev/tty02")
-	rb.stateOfHealth()
+	rb = letsatRockBlock.letsatRockBlock("/dev/ttyO2")
+	rbStatus = rb.stateOfHealth()
 
+	stats = stats + (int(rbStatus),)
 #<><><><> if rbStatus false, try again??? blink some LEDS????
 	signal = rb.signalStrength()
-	if(rbStatus and signal > 0):
+	count = 3
+	#try a couple times to get good signal
+	if ((signal == 0) and (count > 0)):
+		signal = rb.signalStrength()
+		sleep(1)
+		count = count - 1
+
+	print("Signal: " + str(signal))
+
+	message = ""
+	if((rbStatus) and (int(signal) > 0)):
 		#transmit OK and signal
+		for x in stats:
+			message = message + str(x) + ","
 		#make a byte message with statuses of each as 0 or 1
-		message = gpsStatus + "," + accelStatus + "," + altStatus + "," + payloadStatus
+		#message = gpsStatus + "," + accelStatus + "," + altStatus + "," + payloadStatus
 		okMessage = "ER"
-		if(gpsStaus and accelStaus and altStatus and payloadStatus):
+		if(gpsStatus and accelStatus and altStatus and payloadStatus):
 			okMessage = "OK"
 		message = message + okMessage + str(signal)
 		success = rb.sendMessage(message.encode())
+		if(not success):
+			print("Could not transmit")
+			logger.error("Could not transmit")
+
+	else:
+		print("Signal error")
+		logger.error("Signal error")
+
 except Exception as e:
 	print(str(e))
+	logger.error(str(e))
         rbStatus = False
 #if rbStatus false, output red color to debug LED
 
-stats = (int(gpsStatus), int(accelStatus), int(altStatus), int(payloadStatus), int(rbStatus))
 logger.info('%d, %d, %d, %d, %d' % stats)
 
 
@@ -248,9 +280,7 @@ except Exception as e :
 #put in loop. Sleep(~1sec) after polling/logging
 #Setup counter. Counts to 60
 #transmits at 60. Resets.
-#<><><><>sleep or just loop?? allow to be broken?
-#put try catch block inside While loop so it will continue after exception caught
-#needs to conintue logging other working sensors though...
+#exceptions caught inside while loop will log then continue
 while(True):
 	try:
 		counter = 0
@@ -265,7 +295,7 @@ while(True):
 
 			logger.info(messagePoll)
 			print(messagePoll)
-			#<><><><> sleep for 1 second. How accurate does this need to be??
+			#sleep for 1 second
 			sleep(1)
 
 		#<><><><>check for capture altitude
@@ -291,6 +321,7 @@ while(True):
 		print("RB IO Error")
 		continue
 	except (KeyboardInterrupt):
+		#close everything properly after keyboard interrupt
 		handlers = logger.handlers[:]
 		for h in handlers:
 			h.close()
